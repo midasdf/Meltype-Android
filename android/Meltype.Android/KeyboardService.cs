@@ -123,8 +123,25 @@ public sealed class KeyboardService : InputMethodService
         if (_inputRoot is { } root)
             root.Post(() => { root.RequestApplyInsets(); _keyboardInsets?.Apply(root); });
     }
+
+    private void ApplyTheme()
+    {
+        MobileStyle.Apply(this);
+        _root?.SetBackgroundColor(MobileStyle.KeyboardBackground);
+        _candidateScroll?.SetBackgroundColor(MobileStyle.CandidateBackground);
+        _candidateSignature = null;
+    }
+
+    public override void OnConfigurationChanged(global::Android.Content.Res.Configuration? newConfig)
+    {
+        base.OnConfigurationChanged(newConfig);
+        var wasDark = MobileStyle.Dark;
+        ApplyTheme();
+        if (wasDark != MobileStyle.Dark) { BuildKeyRows(); Status(); }
+    }
     public override View OnCreateInputView()
     {
+        ApplyTheme();
         _letters.Clear();
         var root = new LinearLayout(this) { Orientation = Orientation.Vertical };
         _root = root;
@@ -545,6 +562,9 @@ public sealed class KeyboardService : InputMethodService
     {
         base.OnStartInputView(info, restarting);
         ApplyLayoutPreference();
+        var wasDark = MobileStyle.Dark;
+        ApplyTheme();
+        if (wasDark != MobileStyle.Dark) { BuildKeyRows(); }
         _clipboardOfferPreferences ??= GetSharedPreferences("clipboard-offer", FileCreationMode.Private);
         _clipboardSuggestion = new ClipboardSuggestion(_clipboardOfferPreferences!.GetLong("last-copy", 0));
         RefreshClipboardSuggestion(offer: true);
