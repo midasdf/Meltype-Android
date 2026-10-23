@@ -72,6 +72,7 @@ public sealed class KeyboardService : InputMethodService
     private bool _preeditActive;
     private int _generation;
     private int _jobGeneration;
+    private bool _dark; // IME が最後に適用した配色
     private List<Action>? _editorUpdates; // Accessed only by the serialized worker.
     private InputPreferenceStore? _preferences;
     private InputPreferences _activePreferences = new();
@@ -124,20 +125,27 @@ public sealed class KeyboardService : InputMethodService
             root.Post(() => { root.RequestApplyInsets(); _keyboardInsets?.Apply(root); });
     }
 
-    private void ApplyTheme()
+    // 配色を当て直し、IME が前に当てた配色から変わったかを返す。
+    // MobileStyle.Dark は MainActivity も書き換えるので、差分は IME 自身の値で見る。
+    private bool ApplyTheme()
     {
         MobileStyle.Apply(this);
+        var changed = _dark != MobileStyle.Dark;
+        _dark = MobileStyle.Dark;
         _root?.SetBackgroundColor(MobileStyle.KeyboardBackground);
         _candidateScroll?.SetBackgroundColor(MobileStyle.CandidateBackground);
-        _candidateSignature = null;
+        // 候補行の固定ボタンは作り直さないので、ここで塗り直す。
+        if (_clipboardButton != null) MobileStyle.KeyboardKey(_clipboardButton, function: true);
+        if (_oneHandButton != null) MobileStyle.KeyboardKey(_oneHandButton, function: true);
+        if (_hide != null) MobileStyle.KeyboardKey(_hide, function: true);
+        if (changed) _candidateSignature = null; // 保持している候補ボタンも次の Status で作り直す。
+        return changed;
     }
 
     public override void OnConfigurationChanged(global::Android.Content.Res.Configuration? newConfig)
     {
         base.OnConfigurationChanged(newConfig);
-        var wasDark = MobileStyle.Dark;
-        ApplyTheme();
-        if (wasDark != MobileStyle.Dark) { BuildKeyRows(); Status(); }
+        if (ApplyTheme()) { BuildKeyRows(); Status(); }
     }
     public override View OnCreateInputView()
     {
@@ -562,9 +570,7 @@ public sealed class KeyboardService : InputMethodService
     {
         base.OnStartInputView(info, restarting);
         ApplyLayoutPreference();
-        var wasDark = MobileStyle.Dark;
-        ApplyTheme();
-        if (wasDark != MobileStyle.Dark) { BuildKeyRows(); }
+        if (ApplyTheme()) BuildKeyRows();
         _clipboardOfferPreferences ??= GetSharedPreferences("clipboard-offer", FileCreationMode.Private);
         _clipboardSuggestion = new ClipboardSuggestion(_clipboardOfferPreferences!.GetLong("last-copy", 0));
         RefreshClipboardSuggestion(offer: true);
